@@ -22,7 +22,7 @@ import numpy as np
 # Global Dictionary of Flags
 flags = {
     'save_directory': 'summaries/',
-    'model_directory': 'conv_mil5/',
+    'model_directory': 'conv_mil1/',
     'restore': False,
     'restore_file': 'part_4.ckpt.meta',
     'datasets': 'CancerData',
@@ -34,9 +34,9 @@ flags = {
     'weight_decay': 1e-7,
     'lr_decay': 0.999,
     'learn_rate': 0.001,
-    "path_to_image_directory": "/scratch2/mammosprint/mgh-mammo-data-png_square/",
+    "path_to_image_directory": "/scratch2/mammosprint/",
     "path_to_metadata": "metadata.json",
-    "gpu": 0
+    "gpu": 1
 }
 
 
@@ -179,7 +179,7 @@ class ConvMil(Model):
         accuracy = np.mean(self.valid_results)
         self.print_log("Accuracy on Validation Set: %f" % accuracy)
         file = open(self.flags['restore_directory'] + 'ValidAccuracy.txt', 'w')
-        file.write('Test set accuracy:')
+        file.write('Valid set accuracy:')
         file.write(str(accuracy))
         file.close()
 
@@ -192,8 +192,9 @@ class ConvMil(Model):
         file.close()
 
     def run(self):
-        epochs = 30
+        epochs = 40
         train_iters = int(self.data._num_train_images / self.flags['batch_size'])
+        valid_iters = int(self.data._num_valid_images / self.flags['batch_size'])
         test_iters = int(self.data._num_test_images / self.flags['batch_size'])
 
         for j in range(epochs):
@@ -213,6 +214,11 @@ class ConvMil(Model):
             #accuracy = np.mean(results)
             #self.print_log("\nAccuracy on Training Set: %f\n" % accuracy)
 
+            for i in range(valid_iters):
+                self._generate_valid_batch()
+                self._run_valid_iter()
+            self._record_valid_metrics()
+
             for i in range(test_iters):
                 self._generate_test_batch()
                 self._run_test_iter()
@@ -223,6 +229,7 @@ class ConvMil(Model):
 
             self.data.index_in_valid_epoch = -1
             self.data.index_in_test_epoch = -1
+            self.valid_results = list()
             self.test_results = list()
 
         self._save_model(1)

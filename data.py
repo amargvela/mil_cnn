@@ -32,7 +32,7 @@ class CancerData(Data):
             birad_score = 1
         if birad_score == None:
             return None
-        return int(birad_score > self.flags['class_threshold'])
+        return int(birad_score > self.flags['class_threshold'] or birad_score == 0)
 
     def get_data(self, meta):
         X = []
