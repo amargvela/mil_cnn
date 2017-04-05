@@ -17,6 +17,7 @@ from data import CancerData
 
 import tensorflow as tf
 import numpy as np
+from sklearn import metrics
 
 
 # Global Dictionary of Flags
@@ -143,13 +144,13 @@ class ConvMil(Model):
                 feed_dict={self.x: self.train_batch_x, self.y: self.train_batch_y,
                            self.lr: rate})
 
-        print('Loss:', w1_loss, w8_loss)
+        #print('Loss:', w1_loss, w8_loss)
         if np.isnan(w1_loss):
             print("Loss on 1st layer is NaN")
-            assert(np.isnan(w1_loss) == false)
+            assert(np.isnan(w1_loss) == False)
         if np.isnan(self.loss):
             print("Loss function is NaN")
-            assert(np.isnan(self.loss) == false)
+            assert(np.isnan(self.loss) == False)
 
         #correct_prediction = self._evaluate(self.train_batch_y, logits)
         #accuracy = np.mean(correct_prediction)
@@ -165,12 +166,43 @@ class ConvMil(Model):
 
         correct_prediction = self._evaluate(self.valid_batch_y, logits) 
         self.valid_results = np.concatenate((self.valid_results, correct_prediction))
+       
+        if len(self.valid_labels) == 0:
+            self.valid_labels = np.array(self.valid_batch_y, copy=True)
+            self.valid_preds = np.array(logits, copy=True)[0]
+        else: 
+            self.valid_labels = np.concatenate((self.valid_labels, self.valid_batch_y))
+            self.valid_preds = np.concatenate((self.valid_preds, np.array(logits)[0]))
 
     def _run_test_iter(self):
         logits = self.sess.run([self.logits], feed_dict={self.x: self.test_batch_x})
 
         correct_prediction = self._evaluate(self.test_batch_y, logits)
         self.test_results = np.concatenate((self.test_results, correct_prediction))
+       
+        if len(self.test_labels) == 0:
+            self.test_labels = np.array(self.test_batch_y, copy=True)
+            self.test_preds = np.array(logits, copy=True)[0]
+        else:
+            self.test_labels = np.concatenate((self.test_labels, self.test_batch_y))
+            self.test_preds = np.concatenate((self.test_preds, np.array(logits)[0]))
+
+    def report_metrics(self, all_labels, all_preds):
+        roc = metrics.roc_auc_score(all_labels, all_preds)
+
+        all_labels_binary = np.argmax(all_labels, axis=1)
+        all_preds_binary = np.argmax(all_preds, axis=1)
+
+        precision = metrics.precision_score(all_labels_binary, all_preds_binary)
+        recall = metrics.recall_score(all_labels_binary, all_preds_binary)
+        f1 = metrics.f1_score(all_labels_binary, all_preds_binary)
+        confusion_matrix = metrics.confusion_matrix(all_labels_binary, all_preds_binary).tolist()
+
+        self.print_log('roc: {}'.format(roc))
+        self.print_log('precision: {}'.format(precision))
+        self.print_log('recall: {}'.format(recall))
+        self.print_log('f1: {}'.format(f1))
+        self.print_log('confusion_matrix: {}'.format(confusion_matrix))
 
     def _record_train_metrics(self):
         self.print_log("Batch Number: " + str(self.step) + ", Total Loss= " + "{:.6f}".format(self.loss) + "\n")
@@ -182,6 +214,7 @@ class ConvMil(Model):
         file.write('Valid set accuracy:')
         file.write(str(accuracy))
         file.close()
+        self.report_metrics(self.valid_labels, self.valid_preds)
 
     def _record_test_metrics(self):
         accuracy = np.mean(self.test_results)
@@ -190,6 +223,7 @@ class ConvMil(Model):
         file.write('Test set accuracy:')
         file.write(str(accuracy))
         file.close()
+        self.report_metrics(self.test_labels, self.test_preds)
 
     def run(self):
         epochs = 40
@@ -214,11 +248,16 @@ class ConvMil(Model):
             #accuracy = np.mean(results)
             #self.print_log("\nAccuracy on Training Set: %f\n" % accuracy)
 
+            self.valid_labels = list()
+            self.valid_preds = list()
             for i in range(valid_iters):
                 self._generate_valid_batch()
                 self._run_valid_iter()
             self._record_valid_metrics()
 
+
+            self.test_labels = list()
+            self.test_preds = list()
             for i in range(test_iters):
                 self._generate_test_batch()
                 self._run_test_iter()
